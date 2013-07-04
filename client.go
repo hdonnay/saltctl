@@ -8,15 +8,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	//"io"
 	"net/http"
 	"net/http/cookiejar"
-	"os"
-	//"io/ioutil"
 	"net/url"
+	"os"
+	"strconv"
 	"time"
-
-//"regexp"
 )
 
 var user *string
@@ -48,7 +45,7 @@ func init() {
 		fmt.Fprintf(os.Stderr, "  help\n    Print this help.\n\n")
 		fmt.Fprintf(os.Stderr, "  e[xec] tgt fun [arg...]\n    Execute a function on target minions\n\n")
 		fmt.Fprintf(os.Stderr, "  i[nfo] tgt\n    Return information on target minions\n\n")
-		fmt.Fprintf(os.Stderr, "Notes:\n\n<confdir>/config is json that can be used to set 'user' and 'server' options.\n\n")
+		fmt.Fprintf(os.Stderr, "Notes:\n\n<confdir>/config is json that can be used to set options other than config dir.\nAll options must be strings.\n\n")
 	}
 	var err error
 	var fi os.FileInfo
@@ -85,6 +82,12 @@ func init() {
 				f := flag.Lookup("u")
 				if f.Value.String() == f.DefValue {
 					user = &v
+				}
+			case "timeout":
+				f := flag.Lookup("t")
+				if f.Value.String() == f.DefValue {
+					x, _ := strconv.ParseInt(v, 10, 64)
+					timeOut = &x
 				}
 			}
 		}
