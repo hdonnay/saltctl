@@ -12,7 +12,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
-	"strconv"
+	//"strconv"
 	"time"
 )
 
@@ -45,7 +45,7 @@ func init() {
 		fmt.Fprintf(os.Stderr, "  help\n    Print this help.\n\n")
 		fmt.Fprintf(os.Stderr, "  e[xec] tgt fun [arg...]\n    Execute a function on target minions\n\n")
 		fmt.Fprintf(os.Stderr, "  i[nfo] tgt\n    Return information on target minions\n\n")
-		fmt.Fprintf(os.Stderr, "Notes:\n\n<confdir>/config is json that can be used to set options other than config dir.\nAll options must be strings.\n\n")
+		fmt.Fprintf(os.Stderr, "Notes:\n\n<confdir>/config is json that can be used to set options other than config dir.\n\n")
 	}
 	var err error
 	var fi os.FileInfo
@@ -67,7 +67,7 @@ func init() {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		var c map[string]string
+		var c map[string]interface{}
 		dc := json.NewDecoder(f)
 		dc.Decode(&c)
 		f.Close()
@@ -76,18 +76,17 @@ func init() {
 			case "server":
 				f := flag.Lookup("s")
 				if f.Value.String() == f.DefValue {
-					serverString = &v
+					*serverString = v.(string)
 				}
 			case "user":
 				f := flag.Lookup("u")
 				if f.Value.String() == f.DefValue {
-					user = &v
+					*user = v.(string)
 				}
 			case "timeout":
 				f := flag.Lookup("t")
 				if f.Value.String() == f.DefValue {
-					x, _ := strconv.ParseInt(v, 10, 64)
-					timeOut = &x
+					*timeOut = int64(v.(float64))
 				}
 			}
 		}
