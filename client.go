@@ -8,22 +8,37 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
+	//"io"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
 	//"io/ioutil"
 	"net/url"
+	"time"
 
-//	"time"
 //"regexp"
 )
 
 var user *string
 var configDir *string
+var timeOut *int64
 var auth string
 var serverUrl *url.URL
 var jar *cookiejar.Jar
+
+const (
+	_          = iota
+	E_NeedAuth = 1 << iota
+	E_Oops
+)
+
+type internalError struct {
+	Code uint32
+}
+
+func (i *internalError) Error() string {
+	return fmt.Sprintf("Error: %x\n", i.Code)
+}
 
 func init() {
 	flag.Usage = func() {
@@ -32,6 +47,7 @@ func init() {
 		fmt.Fprintf(os.Stderr, "Commands:\n\n")
 		fmt.Fprintf(os.Stderr, "  help\n    Print this help.\n\n")
 		fmt.Fprintf(os.Stderr, "  e[xec] tgt fun [arg...]\n    Execute a function on target minions\n\n")
+		fmt.Fprintf(os.Stderr, "  i[nfo] tgt\n    Return information on target minions\n\n")
 		fmt.Fprintf(os.Stderr, "Notes:\n\n<confdir>/config is json that can be used to set 'user' and 'server' options.\n\n")
 	}
 	var err error
@@ -42,6 +58,7 @@ func init() {
 	configDir = flag.String("c", fmt.Sprintf("/home/%s/.config/saltctl", os.Getenv("USER")), "directory to look for configs")
 	user = flag.String("u", os.Getenv("USER"), "username to authenticate with")
 	serverString = flag.String("s", "https://salt:8000", "server url to talk to")
+	timeOut = flag.Int64("t", 30, "Time in sec to wait for response")
 	flag.Parse()
 
 	// load up config
@@ -178,65 +195,14 @@ func login(reauth bool) {
 		}
 		jar.SetCookies(serverUrl, []*http.Cookie{&http.Cookie{Name: "session_id", Value: auth}})
 	}
-	fmt.Fprintf(os.Stderr, "info: token: %s\n", auth)
+	//fmt.Fprintf(os.Stderr, "info: token: %s\n", auth)
 }
 
-type post struct {
+type lowstate struct {
 	Client string   `json:"client"`
 	Target string   `json:"tgt"`
 	Fun    string   `json:"fun"`
 	Arg    []string `json:"arg"`
-}
-
-func run(tgt, fun string, arg []string) error {
-	var err error
-	var req *http.Request
-	var res *http.Response
-	c := &http.Client{Jar: jar}
-	b, err := json.Marshal([]post{post{"local_async", tgt, fun, arg}})
-	if err != nil {
-		return err
-	}
-	//_, err = io.Copy(os.Stdout, bytes.NewReader(b))
-	req = mkReq("POST", "", &b)
-	res, err = c.Do(req)
-	if err != nil {
-		return err
-	}
-	if res.StatusCode == http.StatusUnauthorized {
-		login(true)
-		return run(tgt, fun, arg)
-	}
-	_, err = io.Copy(os.Stdout, res.Body)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func info(tgt string) error {
-	var err error
-	var req *http.Request
-	var res *http.Response
-	c := &http.Client{Jar: jar}
-	b, err := json.Marshal([]post{post{"local", tgt, "grains.items", []string{}}})
-	if err != nil {
-		return err
-	}
-	req = mkReq("POST", "", &b)
-	res, err = c.Do(req)
-	if err != nil {
-		return err
-	}
-	if res.StatusCode == http.StatusUnauthorized {
-		login(true)
-		return info(tgt)
-	}
-	_, err = io.Copy(os.Stdout, res.Body)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func mkReq(method, path string, body *[]byte) *http.Request {
@@ -258,17 +224,97 @@ func mkReq(method, path string, body *[]byte) *http.Request {
 	return req
 }
 
-func main() {
-	login(false)
-	switch flag.Arg(0) {
-	case "exec", "e":
-		a := flag.Args()
-		run(a[1], a[2], a[3:])
-	case "info", "i":
-		for _, m := range flag.Args()[1:] {
-			info(m)
+func watch(c chan map[string]interface{}, id string, last bool) {
+	var req *http.Request
+	client := &http.Client{Jar: jar}
+	var ret map[string][]map[string]interface{}
+	req = mkReq("GET", fmt.Sprintf("jobs/%s", id), nil)
+	for _ = range time.Tick(2 * time.Second) {
+		res, err := client.Do(req)
+		if err != nil {
+			break
+		}
+		d := json.NewDecoder(res.Body)
+		d.Decode(&ret)
+		if len(ret["return"][0]) > 0 {
+			for _, x := range ret["return"] {
+				c <- x
+			}
+			break
 		}
 	}
-	fmt.Fprintf(os.Stdout, "\n")
+	if last {
+		close(c)
+	}
+}
+
+func async(l []lowstate) (chan map[string]interface{}, error) {
+	var err error
+	var req *http.Request
+	var res *http.Response
+	ret := make(chan map[string]interface{})
+	c := &http.Client{Jar: jar}
+	b, err := json.Marshal(l)
+	if err != nil {
+		return nil, err
+	}
+	//_, err = io.Copy(os.Stdout, bytes.NewReader(b))
+	req = mkReq("POST", "", &b)
+	res, err = c.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode == http.StatusUnauthorized {
+		return nil, &internalError{E_NeedAuth}
+	}
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		var body map[string][]map[string]interface{}
+		d := json.NewDecoder(res.Body)
+		d.Decode(&body)
+		for k, v := range body["return"] {
+			if v["jid"] == nil {
+				ret <- v
+				if len(body["return"]) == 1 {
+					close(ret)
+				}
+			} else {
+				go watch(ret, v["jid"].(string), (len(body["return"]) == (k + 1)))
+			}
+		}
+	}()
+	return ret, nil
+}
+
+func main() {
+	login(false)
+	args := flag.Args()
+	var err error
+	var r chan map[string]interface{}
+	switch flag.Arg(0) {
+	case "exec", "e":
+		r, err = async([]lowstate{lowstate{"local_async", args[1], args[2], args[3:]}})
+		if err != nil {
+			login(true)
+			r, _ = async([]lowstate{lowstate{"local_async", args[1], args[2], args[3:]}})
+		}
+	case "info", "i":
+		r, err = async([]lowstate{lowstate{"local", args[1], "grains.items", []string{}}})
+		if err != nil {
+			login(true)
+			r, _ = async([]lowstate{lowstate{"local", args[1], "grains.items", []string{}}})
+		}
+	}
+	go func() {
+		<-time.After(time.Duration(*timeOut) * time.Second)
+		close(r)
+	}()
+	for ret := range r {
+		prnt, _ := json.MarshalIndent(ret, "  ", "  ")
+		bytes.NewReader(prnt).WriteTo(os.Stdout)
+		fmt.Fprintf(os.Stdout, "\n")
+	}
 	leave()
 }
