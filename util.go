@@ -9,8 +9,37 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"time"
 )
+
+type resultName struct {
+	Module  string
+	Name    string
+	NameArg string
+	Func    string
+}
+
+func (n *resultName) String() string {
+	if n.NameArg == n.Name {
+		return fmt.Sprintf("%s.%s: %s", n.Module, n.Func, n.Name)
+	} else {
+		return fmt.Sprintf("%s.%s: %s (%s)", n.Module, n.Func, n.Name, n.NameArg)
+	}
+}
+
+type result struct {
+	RunNum  int64                  `json:"__run_num__"`
+	Changes map[string]interface{} `json:"changes"`
+	Comment string                 `json:""`
+	Name    string                 `json:"name"`
+	Result  bool                   `json:"result"`
+}
+
+func parseName(n string) *resultName {
+	s := regexp.MustCompile(`_\|-`).Split(n, 4)
+	return &resultName{s[0], s[1], s[2], s[3]}
+}
 
 func leave() {
 	var token string = fmt.Sprintf("%s/token", *configDir)
