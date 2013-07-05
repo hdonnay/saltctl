@@ -18,3 +18,4 @@ ToDo
 
 * pretty print results (should just mean a bit of type switching.)
 * treat maps better (use fewer type assertions)
+* report jid on timeout

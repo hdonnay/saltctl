@@ -28,9 +28,11 @@
 //
 //"timeout": integer specifying maximum bunber of seconds to wait for results from an async call.
 //
+//"eauth": string specifying eauth module to use
+//
 package main
 
-// vim: set noexpandtab :
+// vim : set noexpandtab :
 import (
 	"bytes"
 	"encoding/json"
@@ -47,12 +49,12 @@ import (
 var user *string
 var configDir *string
 var timeOut *int64
+var eauth *string
 var auth string
 var serverUrl *url.URL
 var jar *cookiejar.Jar
 
 const (
-	_          = iota
 	E_NeedAuth = 1 << iota
 	E_Oops
 )
@@ -70,6 +72,7 @@ type lowstate struct {
 	Target string   `json:"tgt"`
 	Fun    string   `json:"fun"`
 	Arg    []string `json:"arg"`
+	Eauth  string   `json:"eauth"`
 }
 
 func init() {
@@ -90,7 +93,8 @@ func init() {
 	configDir = flag.String("c", fmt.Sprintf("/home/%s/.config/saltctl", os.Getenv("USER")), "directory to look for configs")
 	user = flag.String("u", os.Getenv("USER"), "username to authenticate with")
 	serverString = flag.String("s", "https://salt:8000", "server url to talk to")
-	timeOut = flag.Int64("t", 30, "Time in sec to wait for response")
+	timeOut = flag.Int64("t", 60, "Time in sec to wait for response")
+	eauth = flag.String("a", "pam", "eauth module to use")
 	flag.Parse()
 
 	// load up config
@@ -122,6 +126,11 @@ func init() {
 				f := flag.Lookup("t")
 				if f.Value.String() == f.DefValue {
 					*timeOut = int64(v.(float64))
+				}
+			case "eauth":
+				f := flag.Lookup("a")
+				if f.Value.String() == f.DefValue {
+					*eauth = v.(string)
 				}
 			}
 		}
@@ -205,16 +214,16 @@ func main() {
 	var r chan map[string]interface{}
 	switch flag.Arg(0) {
 	case "exec", "e":
-		r, err = async([]lowstate{lowstate{"local_async", args[1], args[2], args[3:]}})
+		r, err = async([]lowstate{lowstate{"local_async", args[1], args[2], args[3:], *eauth}})
 		if err != nil {
 			login(true)
-			r, _ = async([]lowstate{lowstate{"local_async", args[1], args[2], args[3:]}})
+			r, _ = async([]lowstate{lowstate{"local_async", args[1], args[2], args[3:], *eauth}})
 		}
 	case "info", "i":
-		r, err = async([]lowstate{lowstate{"local", args[1], "grains.items", []string{}}})
+		r, err = async([]lowstate{lowstate{"local", args[1], "grains.items", []string{}, *eauth}})
 		if err != nil {
 			login(true)
-			r, _ = async([]lowstate{lowstate{"local", args[1], "grains.items", []string{}}})
+			r, _ = async([]lowstate{lowstate{"local", args[1], "grains.items", []string{}, *eauth}})
 		}
 	}
 	go func() {
