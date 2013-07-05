@@ -37,8 +37,11 @@ type result struct {
 }
 
 func parseName(n string) *resultName {
-	s := regexp.MustCompile(`_\|-`).Split(n, 4)
-	return &resultName{s[0], s[1], s[2], s[3]}
+	fmt.Fprintf(os.Stderr, "debug: parseName: %s given\n", n)
+	s := regexp.MustCompile("_\\|-").Split(n, 4)
+	fmt.Fprintf(os.Stderr, "debug: parseName: %d found\n", len(s))
+	//return &resultName{s[0], s[1], s[2], s[3]}
+	return nil
 }
 
 func leave() {

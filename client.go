@@ -31,7 +31,6 @@
 package main
 
 // vim: set noexpandtab :
-
 import (
 	"bytes"
 	"encoding/json"
@@ -224,7 +223,7 @@ func main() {
 	}()
 	for ret := range r {
 		for k, v := range ret {
-			fmt.Fprintf(os.Stdout, "%s:\n", parseName(k).String())
+			fmt.Fprintf(os.Stdout, "%s:\n", k)
 			prnt, _ := json.MarshalIndent(v, "  ", "  ")
 			bytes.NewReader(prnt).WriteTo(os.Stdout)
 			fmt.Fprintf(os.Stdout, "\n")
