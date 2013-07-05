@@ -80,12 +80,16 @@ func login(reauth bool) {
 		fmt.Fprintf(os.Stdout, "\n")
 
 		// prompt for pass
-		b, err := json.Marshal(&arg{"pam", *user, string(pass)})
+		b, err := json.Marshal(&arg{*eauth, *user, string(pass)})
 		req = mkReq("POST", "login", &b)
 		res, err = c.Do(req)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
+		}
+		if res.StatusCode == http.StatusUnauthorized {
+			fmt.Fprintf(os.Stderr, "Authentication failed.\n")
+			os.Exit(2)
 		}
 		//fmt.Fprintf(os.Stderr, "debug: %+v\n", res)
 		//fmt.Fprintf(os.Stderr, "debug: %+v\n", res.Body)

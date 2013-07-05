@@ -50,6 +50,7 @@ var user *string
 var configDir *string
 var timeOut *int64
 var eauth *string
+var reAuth *bool
 var auth string
 var serverUrl *url.URL
 var jar *cookiejar.Jar
@@ -72,7 +73,6 @@ type lowstate struct {
 	Target string   `json:"tgt"`
 	Fun    string   `json:"fun"`
 	Arg    []string `json:"arg"`
-	Eauth  string   `json:"eauth"`
 }
 
 func init() {
@@ -95,6 +95,7 @@ func init() {
 	serverString = flag.String("s", "https://salt:8000", "server url to talk to")
 	timeOut = flag.Int64("t", 60, "Time in sec to wait for response")
 	eauth = flag.String("a", "pam", "eauth module to use")
+	reAuth = flag.Bool("r", false, "force re-authentication")
 	flag.Parse()
 
 	// load up config
@@ -208,22 +209,22 @@ func async(l []lowstate) (chan map[string]interface{}, error) {
 
 //Usage: %name %flags command [arg...]
 func main() {
-	login(false)
+	login(*reAuth)
 	args := flag.Args()
 	var err error
 	var r chan map[string]interface{}
 	switch flag.Arg(0) {
 	case "exec", "e":
-		r, err = async([]lowstate{lowstate{"local_async", args[1], args[2], args[3:], *eauth}})
+		r, err = async([]lowstate{lowstate{"local_async", args[1], args[2], args[3:]}})
 		if err != nil {
 			login(true)
-			r, _ = async([]lowstate{lowstate{"local_async", args[1], args[2], args[3:], *eauth}})
+			r, _ = async([]lowstate{lowstate{"local_async", args[1], args[2], args[3:]}})
 		}
 	case "info", "i":
-		r, err = async([]lowstate{lowstate{"local", args[1], "grains.items", []string{}, *eauth}})
+		r, err = async([]lowstate{lowstate{"local", args[1], "grains.items", []string{}}})
 		if err != nil {
 			login(true)
-			r, _ = async([]lowstate{lowstate{"local", args[1], "grains.items", []string{}, *eauth}})
+			r, _ = async([]lowstate{lowstate{"local", args[1], "grains.items", []string{}}})
 		}
 	}
 	go func() {
