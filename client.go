@@ -32,7 +32,8 @@
 //
 package main
 
-// vim : set noexpandtab :
+// vim: set noexpandtab :
+
 import (
 	"bytes"
 	"encoding/json"
@@ -54,6 +55,7 @@ var reAuth *bool
 var auth string
 var serverUrl *url.URL
 var jar *cookiejar.Jar
+var prettyPrint bool = false
 
 const (
 	E_NeedAuth = 1 << iota
@@ -232,9 +234,9 @@ func main() {
 		close(r)
 	}()
 	for ret := range r {
-		for k, v := range ret {
-			fmt.Fprintf(os.Stdout, "%s:\n", k)
-			prnt, _ := json.MarshalIndent(v, "  ", "  ")
+		if prettyPrint {
+		} else {
+			prnt, _ := json.MarshalIndent(ret, "  ", "  ")
 			bytes.NewReader(prnt).WriteTo(os.Stdout)
 			fmt.Fprintf(os.Stdout, "\n")
 		}
